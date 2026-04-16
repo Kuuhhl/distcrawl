@@ -33,9 +33,9 @@ dbDisconnect(db_conn)
 
 df_experiment$experiment_id <- factor(df_experiment$experiment_id,
   levels = c(
-    "chromium25kohnecookies_bea6cc6a",
-    "firefox25kmitcookies_4b84a683",
-    "chromium25kmitcookies_d010ca7c"
+    "chromiumnocookies_59ee9cb3",
+    "firefoxwithcookies_1fb8ae54",
+    "chromiumwithcookies_453638a1"
   ),
   labels = c(
     "Exp. 1\n(Chromium w/o cookies)",

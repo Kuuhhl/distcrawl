@@ -4,13 +4,24 @@ library(ggplot2)
 db_conn <- dbConnect(duckdb())
 
 df <- dbGetQuery(db_conn, "
-  WITH total_sites AS (
-    SELECT COUNT(DISTINCT crawled_url) AS total
-    FROM read_parquet('../results/*/enriched/labeled_requests.parquet')
+  WITH successful_sessions AS (
+    SELECT DISTINCT
+      regexp_extract(filename, 'results/([^/]+)/', 1) AS experiment_id,
+      crawl_session_id
+    FROM read_parquet('../results/*/enriched/site_metadata.parquet', hive_partitioning=0, filename=true)
+  ),
+  total_sites AS (
+    SELECT COUNT(DISTINCT r.crawled_url) AS total
+    FROM read_parquet('../results/*/enriched/labeled_requests.parquet', filename=true) r
+    JOIN successful_sessions s
+      ON r.experiment_id = s.experiment_id AND r.crawl_session_id = s.crawl_session_id
+    WHERE r.crawl_depth = 0
   ),
   cookie_sites AS (
-    SELECT COUNT(DISTINCT crawled_url) AS with_cookie
-    FROM read_parquet('../results/*/enriched/cookie_warning_consents.parquet')
+    SELECT COUNT(DISTINCT c.crawled_url) AS with_cookie
+    FROM read_parquet('../results/*/enriched/cookie_warning_consents.parquet') c
+    JOIN successful_sessions s
+      ON c.experiment_id = s.experiment_id AND c.crawl_session_id = s.crawl_session_id
   )
   SELECT
     cookie_sites.with_cookie,
