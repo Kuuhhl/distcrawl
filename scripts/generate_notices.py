@@ -42,6 +42,11 @@ MANUAL_ENTRIES = textwrap.dedent("""\
     DATASETS
     ========================================================================
 
+    Tranco
+    ------
+
+    Citation: Victor Le Pochat, Tom Van Goethem, Samaneh Tajalizadehkhoob, Maciej Korczyński, and Wouter Joosen. 2019. "Tranco: A Research-Oriented Top Sites Ranking Hardened Against Manipulation," Proceedings of the 26th Annual Network and Distributed System Security Symposium (NDSS 2019). https://doi.org/10.14722/ndss.2019.23386
+
     countries (mledoze/countries)
     -----------------------------
     License: Open Data Commons Open Database License (ODbL) v1.0
