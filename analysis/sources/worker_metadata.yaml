@@ -1,0 +1,5 @@
+type: duckdb
+sql: |
+  SELECT 
+    worker_id, country_code, is_residential
+  FROM read_parquet('../results/*/enriched/worker_metadata.parquet')

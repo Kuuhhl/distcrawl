@@ -1,0 +1,80 @@
+services:
+  nats:
+    image: nats:alpine
+    command: "-js -sd /data/nats/jetstream -m 8222"
+    ports:
+      - "14222:4222"
+      - "18222:8222"
+    volumes:
+      - ./data_e2e:/data
+    environment:
+      - NATS_TOKEN=e2e_test_token
+    healthcheck:
+      test: wget http://localhost:8222/healthz -q -S -O -
+      start_period: 3s
+      retries: 3
+      timeout: 3s
+      interval: 14s
+
+  seeder:
+    build:
+      context: ../..
+      dockerfile: scripts/Dockerfile
+    volumes:
+      - .:/app/tests/e2e
+      - ../../scripts:/app/scripts
+      - ../../common:/app/common
+      - ./data_e2e/results:/tmp/crawler_results
+    working_dir: /app/tests/e2e
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NATS_TOKEN=e2e_test_token
+      - MAX_NUM_URLS=${MAX_NUM_URLS:-1}
+      - EXPERIMENT_ID=${EXPERIMENT_ID:-e2e_test}
+      - PYTHONPATH=/app/scripts:/app/common/src
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/tmp/crawler_results
+    command: >
+      sh -c "python seeder.py"
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  mock_server:
+    build:
+      context: ./mock_server
+    ports:
+      - "18080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/basic"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  crawler_worker:
+    build:
+      context: ../..
+      dockerfile: worker/Dockerfile
+    volumes:
+      - ./data_e2e/results:/tmp/crawler_results
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NATS_TOKEN=e2e_test_token
+      - NATS_STREAM=CRAWL_E2E
+      - RESULTS_BUCKET_NAME=e2e-results
+      - NATS_SUBJECT_PREFIX=crawl.urls
+      - NUM_CRAWLERS=1
+      - FLUSH_THRESHOLD=${FLUSH_THRESHOLD:-1}
+      - BROWSER_TYPE=${BROWSER_TYPE:-chromium}
+      - HEADLESS=${HEADLESS:-true}
+      - NATS_ACK_WAIT_SECONDS=45
+      - HEARTBEAT_SECONDS=15
+      - LOGGING_LEVEL=INFO
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/tmp/crawler_results
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+    deploy:
+      replicas: 1
+    depends_on:
+      nats:
+        condition: service_healthy

@@ -1,0 +1,10 @@
+type: duckdb
+sql: |
+  SELECT
+    -- Clean TLDs (e.g. ".uk,.gb" -> two rows: "uk" and "gb")
+    lower(unnest(string_split(replace(tld, '.', ''), ','))) AS tld_key,
+    region AS continent,
+    subregion,
+    -- Check if in EU
+    cca2 IN ('AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK') AS is_eu
+  FROM read_csv_auto('https://raw.githubusercontent.com/mledoze/countries/refs/heads/master/dist/countries.csv')

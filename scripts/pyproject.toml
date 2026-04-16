@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dist-scripts"
+version = "0.1.0"
+description = "CLI toolchain for seeding, monitoring, and analyzing distcrawl crawls."
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "tranco>=0.3.0",
+    "rich",
+    "duckdb>=0.10.0",
+    "adblock>=0.6.0",
+    "python-dotenv",
+    "dist-common",
+    "tqdm",
+    "url-normalize",
+    "defopt",
+    "faststream[nats]>=0.5.0",
+    "obstore>=0.1.0",
+    "aiohttp",
+]
+
+[tool.uv.sources]
+dist-common = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio",
+    "pytest-mock",
+    "ruff",
+    "aiohttp",
+    "pandas>=2.0.0",
+    "pyarrow",
+]
+
+# This allows you to run "dist-seed" etc. directly from your shell after pip install
+[project.scripts]
+dist-seed = "seed:main"
+dist-status = "status:main"
+dist-download = "download:main"
+dist-fetch-tranco = "fetch_tranco:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

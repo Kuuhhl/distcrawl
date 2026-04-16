@@ -1,0 +1,7 @@
+type: duckdb
+sql: |
+  SELECT
+    regexp_extract(filename, 'results/([^/]+)/', 1) AS experiment_id,
+    crawl_session_id,
+    to_timestamp(CAST(timestamp AS DOUBLE)) AT TIME ZONE 'Europe/Berlin' AS scraped_at
+  FROM read_parquet('../results/*/enriched/site_metadata.parquet', hive_partitioning=0, filename=true)

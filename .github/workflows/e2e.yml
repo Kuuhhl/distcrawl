@@ -1,0 +1,61 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  infra:
+    name: Infrastructure Connectivity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv venv
+      - name: Install dependencies
+        run: |
+          uv pip install -r tests/e2e/requirements.txt
+          uv pip install -e common -e scripts -e worker
+      - name: Run Infra Tests
+        run: uv run pytest tests/e2e/infra/
+
+  core:
+    name: Core Crawl Flow
+    needs: infra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv venv
+      - name: Install dependencies
+        run: |
+          uv pip install -r tests/e2e/requirements.txt
+          uv pip install -e common -e scripts -e worker
+      - name: Run Core Tests
+        run: uv run pytest tests/e2e/core/
+
+  resilience:
+    name: Resilience and Recovery
+    needs: core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv venv
+      - name: Install dependencies
+        run: |
+          uv pip install -r tests/e2e/requirements.txt
+          uv pip install -e common -e scripts -e worker
+      - name: Run Resilience Tests
+        run: uv run pytest tests/e2e/resilience/

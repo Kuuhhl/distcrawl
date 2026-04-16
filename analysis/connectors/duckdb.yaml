@@ -1,0 +1,8 @@
+type: connector
+
+driver: duckdb
+managed: true
+init_sql: |
+  SET preserve_insertion_order = false;
+  SET memory_limit = '12GB';
+  SET threads = 2;

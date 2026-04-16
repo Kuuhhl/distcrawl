@@ -1,0 +1,7 @@
+type: duckdb
+sql: |
+  SELECT
+    regexp_extract(filename, 'results/([^/]+)/', 1) AS exp_id,
+    request_id, worker_id, crawl_session_id, timestamp,
+    crawled_url, url, resource_type, crawl_depth, blocked_by
+  FROM read_parquet('../results/*/enriched/labeled_requests.parquet', filename=true)

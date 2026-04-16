@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache
+data
+tests/e2e/data_e2e
+assets
+.env
+.env.example
+README.md
+.pre-commit-config.yaml

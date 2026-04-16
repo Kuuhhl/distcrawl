@@ -1,0 +1,50 @@
+services:
+  nats:
+    image: nats:alpine
+    command: "-c /nats.conf"
+    ports:
+      - "8080:8080"
+      - "8222:8222"
+    volumes:
+      - ./data/nats:/data
+    environment:
+      - NATS_TOKEN
+    configs:
+      - source: nats_config
+        target: /nats.conf
+    healthcheck:
+      test: wget http://localhost:8222/healthz -q -S -O -
+      start_period: 3s
+      retries: 3
+      timeout: 3s
+      interval: 14s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["cloudflare_tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+      - TUNNEL_TRANSPORT_PROTOCOL=http2
+    restart: unless-stopped
+    depends_on:
+      nats:
+        condition: service_healthy
+
+configs:
+  nats_config:
+    content: |
+      jetstream {
+        store_dir: "/data/jetstream"
+      }
+
+      authorization {
+        token: "${NATS_TOKEN}"
+      }
+
+      websocket {
+        port: 8080
+        no_tls: true
+      }
+
+      http_port: 8222

@@ -1,0 +1,10 @@
+# Explore YAML
+# Reference documentation: https://docs.rilldata.com/reference/project-files/explore-dashboards
+
+type: explore
+
+display_name: "Site Summary dashboard"
+metrics_view: site_summary_metrics
+
+dimensions: '*'
+measures: '*'

@@ -1,0 +1,102 @@
+version: 1
+type: metrics_view
+
+display_name: Site Summary
+model: site_summary_enriched
+
+dimensions:
+  - name: request_crawled_url
+    display_name: Seed Website
+    column: request_crawled_url
+  - name: request_page_type
+    display_name: Page Type (Homepage vs Subpage)
+    column: request_page_type
+  - name: request_crawl_depth_int
+    display_name: Exact Crawl Depth
+    column: request_crawl_depth_int
+
+  - name: request_requested_domain
+    display_name: Tracker / Target Domain
+    column: request_requested_domain
+  - name: request_blocked_by
+    display_name: Blocked By (Filter Lists)
+    column: request_blocked_by
+  - name: request_is_tracker
+    display_name: Is Known Tracker/Ad
+    column: request_is_tracker
+
+  - name: cookie_request_class
+    display_name: Cookie Behavior Class
+    column: cookie_request_class
+
+  - name: min_depth
+    display_name: Minimum Crawl Depth Required
+    column: min_depth
+
+  - name: experiment_browser_type
+    display_name: Browser Type
+    column: experiment_browser_type
+  - name: browser_signature
+    display_name: Tracker Browser Signature
+    column: browser_signature
+
+  - name: response_status
+    display_name: HTTP Status Code
+    column: response_status
+
+  - name: request_resource_type
+    display_name: Resource Type
+    column: request_resource_type
+
+  - name: experiment_id
+    display_name: Experiment ID
+    column: experiment_id
+  - name: experiment_auto_accept_cookies
+    display_name: Auto-Accepted Cookies?
+    column: experiment_auto_accept_cookies
+  - name: experiment_navigate_subpages
+    display_name: Navigated Subpages?
+    column: experiment_navigate_subpages
+
+  - name: worker_country_code
+    display_name: Worker Country
+    column: worker_country_code
+  - name: worker_is_residential
+    display_name: Is Residential IP
+    column: worker_is_residential
+
+  - name: seed_rank_bucket
+    display_name: Website Rank (Tranco)
+    column: seed_rank_bucket
+
+  - name: website_legal_zone
+    display_name: Website Legal Zone (GDPR)
+    column: website_legal_zone
+  - name: website_continent
+    display_name: Website Continent
+    column: website_continent
+measures:
+  - name: total_network_requests
+    display_name: Total Network Requests
+    expression: COUNT(*)
+    description: The absolute total volume of all network traffic generated.
+    format_preset: humanize
+
+  - name: total_trackers_loaded
+    display_name: Total Trackers Loaded
+    expression: SUM(CASE WHEN request_is_tracker THEN 1 ELSE 0 END)
+    description: The total volume of requests explicitly flagged by your blocklist
+      as trackers or ads.
+    format_preset: humanize
+
+  - name: unique_domains_contacted
+    display_name: Unique Domains Contacted
+    expression: APPROX_COUNT_DISTINCT(request_requested_domain)
+    description: The variety of different third-party servers the browsers
+      communicated with.
+    format_preset: humanize
+  - expression: COUNT(DISTINCT seed_domain)
+    name: total_seed_domains
+    display_name: Total Seed Domains
+    format_preset: none
+    valid_percent_of_total: false

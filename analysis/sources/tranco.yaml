@@ -1,0 +1,6 @@
+type: duckdb
+sql: |
+  SELECT
+    column0::INTEGER AS tranco_rank,
+    column1::VARCHAR AS domain
+  FROM read_csv_auto('../data/tranco_cache/*.csv', header=FALSE)

@@ -1,0 +1,19 @@
+version: 1
+type: metrics_view
+
+display_name: Crawl Progress
+model: crawl_progress
+
+timeseries: scraped_at
+
+dimensions:
+  - name: experiment_id
+    display_name: Experiment
+    column: experiment_id
+
+measures:
+  - name: sites_completed
+    display_name: Sites Completed
+    expression: MAX(sites_completed)
+    format_preset: humanize
+smallest_time_grain: minute

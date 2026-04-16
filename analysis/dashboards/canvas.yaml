@@ -1,0 +1,43 @@
+# Explore YAML
+# Reference documentation: https://docs.rilldata.com/reference/project-files/canvas-dashboards
+
+type: canvas
+display_name: "Canvas Dashboard"
+defaults:
+  time_range: PT24H
+  comparison_mode: time
+rows:
+  - items:
+      - line_chart:
+          color:
+            field: experiment_id
+            type: nominal
+          description: ""
+          metrics_view: crawl_progress_metrics
+          title: ""
+          x:
+            field: scraped_at
+            limit: 20
+            sort: -y
+            type: temporal
+          y:
+            field: sites_completed
+            type: quantitative
+            zeroBasedOrigin: true
+        width: 12
+    height: 40px
+filters:
+  enable: true
+time_zones:
+  - UTC
+  - America/Los_Angeles
+  - America/Chicago
+  - America/New_York
+  - Europe/London
+  - Europe/Paris
+  - Asia/Jerusalem
+  - Europe/Moscow
+  - Asia/Kolkata
+  - Asia/Shanghai
+  - Asia/Tokyo
+  - Australia/Sydney

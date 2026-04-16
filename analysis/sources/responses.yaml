@@ -1,0 +1,5 @@
+type: duckdb
+sql: |
+  SELECT
+    request_id, status
+  FROM read_parquet('../results/*/enriched/responses.parquet', filename=true)

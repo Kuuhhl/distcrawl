@@ -1,0 +1,4 @@
+type: duckdb
+sql: |
+  SELECT DISTINCT crawl_session_id
+  FROM read_parquet('../results/*/enriched/cookie_warning_consents.parquet', filename=true)

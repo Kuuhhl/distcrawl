@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dist-common"
+version = "0.1.0"
+description = "Common models and schemas for distcrawl."
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.13.1",
+    "obstore",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dist_common"]

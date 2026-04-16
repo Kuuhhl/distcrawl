@@ -1,0 +1,5 @@
+type: duckdb
+sql: |
+  SELECT
+    id as exp_id, params
+  FROM read_json_auto('../results/*/metadata.json')

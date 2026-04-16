@@ -1,0 +1,43 @@
+services:
+  crawler_worker:
+    network_mode: host
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+    - NATS_URL
+    - NATS_TOKEN
+    - NATS_STREAM
+    - RESULTS_BUCKET_NAME
+    - NATS_SUBJECT_PREFIX
+    - NATS_ACK_WAIT_SECONDS
+    - NUM_CRAWLERS
+    - HEADLESS
+    - BROWSER_TYPE
+    - GOTO_TIMEOUT_MS
+    - PERSISTENCE_BATCH_SIZE
+    - HEARTBEAT_SECONDS
+    - LOGGING_LEVEL
+    - DEBUG_DISPLAY
+    - STORAGE_TYPE
+    - S3_ENDPOINT_URL
+    - S3_ACCESS_KEY
+    - S3_SECRET_KEY
+    - ONLY_ALLOW_RESIDENTIAL_CONNECTIONS
+    - FLUSH_THRESHOLD
+    - WATCHDOG_TIMEOUT_SECONDS
+    - FETCH_TIMEOUT
+    - IDLE_SLEEP
+    - QUEUE_RETRY_DELAY_SECONDS
+    - MAX_RETRIES
+    - SCROLL_DELAY_SECONDS
+    - LOCAL_STORAGE_PATH
+    volumes:
+    - crawler_data:/data/crawler_results
+    ipc: host
+    deploy:
+      replicas: 1
+    restart: unless-stopped
+
+volumes:
+  crawler_data:
