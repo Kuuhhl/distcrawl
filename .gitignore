@@ -35,7 +35,6 @@ data/
 tests/e2e/data_e2e/
 
 scripts/.tranco/
-uv.lock
 
 .DS_Store
 
