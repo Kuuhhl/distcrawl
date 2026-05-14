@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/1212650520.svg)](https://doi.org/10.5281/zenodo.19613035)
 # distcrawl
 
 Distributed web crawler built on NATS JetStream and Playwright. Workers pull tasks from the queue, visit pages, and save network traffic to the object store as Parquet files.
