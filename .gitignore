@@ -33,11 +33,5 @@ htmlcov/
 .ruff_cache/
 data/
 tests/e2e/data_e2e/
-
 scripts/.tranco/
-
 .DS_Store
-
-# Rill
-.env
-tmp

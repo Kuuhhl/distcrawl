@@ -369,7 +369,7 @@ class PlaywrightEngine:
 
                 event: RequestEvent = {
                     "experiment_id": experiment_id,
-                    "request_id": str(id(request)),
+                    "request_id": request._guid,  # https://github.com/microsoft/playwright/issues/13246 implementation detail, not public.
                     "worker_id": "",  # will be populated by the sink
                     "crawl_session_id": crawl_session_id,
                     "timestamp": str(time.time()),
@@ -402,7 +402,7 @@ class PlaywrightEngine:
                 timing = response.request.timing
                 event: ResponseEvent = {
                     "experiment_id": experiment_id,
-                    "request_id": str(id(response.request)),
+                    "request_id": response.request._guid,
                     "crawl_session_id": crawl_session_id,
                     "timestamp": str(
                         timing.get("startTime", 0) + timing.get("responseStart", 0)

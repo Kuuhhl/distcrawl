@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "distcrawl"
-version = "0.5.0"
+version = "0.6.0"
 description = "A parallel web crawler with consent management using Playwright"
 authors = [{name = "Henry Schwerdtner", email = "henry.schwerdtner@web.de"}, {name="Philipp Landmann", email= "phl.ldm@stud.uni-frankfurt.de"}]
 license = {text = "MIT"}

@@ -1,4 +1,3 @@
-[![DOI](https://zenodo.org/badge/1212650520.svg)](https://doi.org/10.5281/zenodo.19613035)
 # distcrawl
 
 Distributed web crawler built on NATS JetStream and Playwright. Workers pull tasks from the queue, visit pages, and save network traffic to the object store as Parquet files.
@@ -9,7 +8,6 @@ To read more about each part of the crawler, check their `README`-files:
 
 - [worker/README.md](worker/README.md)
 - [scripts/README.md](scripts/README.md)
-- [analysis/README.md](analysis/README.md)
 - [common/README.md](common/README.md)
 - [tests/README.md](tests/README.md)
 
@@ -17,7 +15,6 @@ To read more about each part of the crawler, check their `README`-files:
 
 - Docker and Docker Compose (for worker and nats jetstream)
 - `uv` for running scripts
-- [Rill](https://github.com/rilldata/rill) to analyze the completed experiments.
 
 ## Local Setup
 
@@ -62,12 +59,7 @@ uv run dist-status
 uv run dist-download
 ```
 
-5. Analyze the results:
-```bash
-cd analysis && rill start
-```
-
-> After the model is built by Rill, you can connect a DuckDB client to `tmp/default/duckdb/main.db` for further analysis.
+5. Analyze the results: You can use DuckDB-SQL directly or business intelligence tools such as [Rill](https://www.rilldata.com).
 
 ## Running Tests
 

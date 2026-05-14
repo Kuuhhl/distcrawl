@@ -46,20 +46,6 @@ MANUAL_ENTRIES = textwrap.dedent("""\
     ------
 
     Citation: Victor Le Pochat, Tom Van Goethem, Samaneh Tajalizadehkhoob, Maciej Korczyński, and Wouter Joosen. 2019. "Tranco: A Research-Oriented Top Sites Ranking Hardened Against Manipulation," Proceedings of the 26th Annual Network and Distributed System Security Symposium (NDSS 2019). https://doi.org/10.14722/ndss.2019.23386
-
-    countries (mledoze/countries)
-    -----------------------------
-    License: Open Data Commons Open Database License (ODbL) v1.0
-    Source: https://github.com/mledoze/countries
-    Maintained by: mledoze (https://github.com/mledoze)
-
-    This project uses data from the "countries" dataset, which is made
-    available under the Open Database License:
-    http://opendatacommons.org/licenses/odbl/1.0/
-
-    Any rights in individual contents of the database are licensed under the
-    Database Contents License:
-    http://opendatacommons.org/licenses/dbcl/1.0/
 """)
 
 ROOT = Path(__file__).resolve().parent.parent
