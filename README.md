@@ -53,6 +53,8 @@ uv run dist-seed --accept-cookies --no-navigate --depth 0 --dwell-seconds 30 --s
 uv run dist-status
 ```
 
+> For more detailed live data on the currently running crawls (Dashboard, Graphs, Logs, Metrics, ...), the crawler exposes *OpenTelemetry*-data that can be used with a collector such as [Grafana Cloud](https://grafana.com/products/cloud/).
+
 4. Download and post-process results:
 ```bash
 uv run dist-download

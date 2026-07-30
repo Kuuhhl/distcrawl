@@ -35,7 +35,7 @@ resource "saladcloud_container_group" "distcrawl-workers" {
       LOGGING_LEVEL                      = "INFO"
       SEED_PUBLISH_BATCH_SIZE            = 3
     }
-    image = "ghcr.io/kuuhhl/distcrawl_scratchpad/worker-chromium-headless:latest"
+    image = "ghcr.io/kuuhhl/distcrawl/worker-chromium-headless:latest"
     resources = {
       cpu    = 2
       memory = 4096
