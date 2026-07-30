@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>distcrawl weekly demo run</title>
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml, %3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext x='32' y='50' text-anchor='middle' font-family='Inter, system-ui, sans-serif' font-size='48' font-weight='700' fill='%23ffffff' letter-spacing='-1'%3EDC%3C/text%3E%3C/svg%3E" />
+    <style>
+        .box {
+            max-width: 80vw;
+        }
+
+        p {
+            max-width: 80%;
+        }
+
+        .container {
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+        }
+
+        .table-container {
+            overflow-x: scroll;
+        }
+
+        @media (max-width: 1000px) {
+            .box {
+                max-width: 100vw;
+            }
+
+            p {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="box">
+            <h1>distcrawl demo results. Last updated: {{ date }}</h1>
+            <p>This site shows the results of a weekly demo run of the <a
+                    href="https://github.com/kuuhhl/distcrawl">distcrawl</a> project.
+                Every week on Monday, we use Terraform to automatically spin up the infrastructure across providers
+                (Hetzner,
+                Cloudflare, SaladCloud), then run the demo crawl and show the results on this site. Then all
+                infrastructure
+                is
+                destroyed. I chose wikipedia, duckduckgo and my personal website. The last crawl of our 3 example
+                websites
+                happened on {{ date }}{% if crawl_duration %} and took {{ crawl_duration }}{% endif %}.
+            </p>
+            <div class="table-container">
+                <table border="1">
+                    <tr>
+                        <th>Site</th>
+                        <th>Meta Description</th>
+                        <th>Status</th>
+                        <th>Requests</th>
+                        <th>Responses</th>
+                        <th>Crawled from Country</th>
+                        <th>Crawl Time</th>
+                    </tr>
+                    {% for site in sites %}
+                    <tr>
+                        <td><a href="https://{{ site.url }}">{{ site.url }}</a></td>
+                        <td>{{ site.meta_desc }}</td>
+                        <td>{{ site.status }}</td>
+                        <td>{{ site.requests }}</td>
+                        <td>{{ site.responses }}</td>
+                        <td>{{ site.crawler_country }}</td>
+                        <td>{{ site.crawl_time }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <p>See <a href="https://github.com/kuuhhl/distcrawl">the distcrawl GitHub repository</a> to learn more about
+                the
+                project and how to deploy it for your own crawls. Because we can split the crawling task across dozens /
+                hundreds of machines, collecting large-scale datasets can be done very quickly and cheaply by taking
+                advantage
+                of consumer-grade hardware (e.g. SaladCloud nodes) or spot instances. I have successfully tested it on a
+                crawl
+                of different configurations (browser choice, cookie acceptance enabled, disabled) to collect a large
+                scale
+                (~23GB) dataset of requests and responses for my bachelor's thesis "Web Crawling Analysis of Cookie
+                Consent
+                and
+                Subpage Navigation Effects on Web Tracking". The dataset is available <a
+                    href="https://doi.org/10.5281/zenodo.20185666">here</a>.
+            </p>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.50.0-noble
+FROM node:20-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -8,9 +8,13 @@ ENV PYTHONUNBUFFERED=1 \
     LOCAL_STORAGE_PATH=/data/crawler_results \
     PATH="/app/.venv/bin:$PATH"
 
+# by default install all browsers, if specified just one of them
+ARG BROWSER=""
+
 RUN apt-get update && \
     apt-get install -y xvfb unzip && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    npx -y playwright@1.60.0 install --with-deps $BROWSER
 
 WORKDIR /app
 

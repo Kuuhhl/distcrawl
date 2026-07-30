@@ -2,13 +2,17 @@
 
 import logging
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-from faststream.nats import NatsMessage
 from dist_common import CrawlTask
+from faststream.nats import NatsMessage
+from opentelemetry import trace
+from opentelemetry.trace.status import StatusCode
+
 from distcrawl.config import WorkerSettings
 from distcrawl.crawl.errors import BrowserCrashError
 from distcrawl.crawl.navigator import CrawlNavigator
+from distcrawl.otel import DistCrawlMetrics
 from distcrawl.telemetry.protocol import CallbackSink
 
 logger = logging.getLogger(__name__)
@@ -22,15 +26,21 @@ class Crawler:
         navigator: CrawlNavigator,
         sink: CallbackSink,
         config: WorkerSettings,
+        metrics: Optional[DistCrawlMetrics] = None,
     ) -> None:
         self.navigator = navigator
         self.sink = sink
         self.config = config
+        self.metrics = metrics
         self._shutting_down = False
 
         # messages that need to be acked in the next batch
         # (that means that all telemetry has been pushed to the object store already)
         self._pending_acknowledgments: List[NatsMessage] = []
+
+        # metadata for pending acks, keyed by stream sequence:
+        # (experiment_id, crawl_success)
+        self._pending_ack_meta: Dict[int, tuple[str, bool]] = {}
 
         # messages currently being processed (used for the heartbeat)
         # the key is the sequence number of the message
@@ -58,6 +68,18 @@ class Crawler:
         self._active_message_lease_map[seq] = msg
         self._processing_count += 1
 
+        span = trace.get_current_span()
+        span.set_attribute("task.url", task.url)
+        span.set_attribute("task.experiment_id", task.experiment_id)
+        span.set_attribute("task.max_depth", task.max_depth)
+        span.set_attribute("task.navigate_subpages", task.navigate_subpages)
+        span.set_attribute("task.auto_accept_cookies", task.auto_accept_cookies)
+        span.set_attribute("task.dwell_time", task.dwell_time)
+        span.set_attribute("task.scroll_amounts", task.scroll_amounts)
+
+        if self.metrics is not None:
+            self.metrics.task_started()
+
         try:
             logger.info(
                 "Processing %s (Experiment ID: %s)", task.url, task.experiment_id
@@ -66,18 +88,25 @@ class Crawler:
             # execute the navigation sequence and gather telemetry (requests, responses, ...)
             success = await self._navigate_and_collect_telemetry(task)
 
+            experiment_id = task.experiment_id
+            span.set_attribute("crawl.success", success)
             if success:
+                span.set_status(StatusCode.OK)
                 self._pending_acknowledgments.append(msg)
+                self._pending_ack_meta[seq] = (experiment_id, True)
                 logger.info(
                     "Task success: %s - pending ACKs count: %d",
                     task.url,
                     len(self._pending_acknowledgments),
                 )
             else:
+                # navigation failures are expected crawl outcomes, not worker errors
                 logger.warning(
                     "Task failed, acknowledging message immediately: %s", task.url
                 )
-                await self._acknowledge_single_message_immediately(msg)
+                await self._acknowledge_single_message_immediately(
+                    msg, experiment_id, False
+                )
 
             # evaluate if we should commit the current batch of work
             if len(self._pending_acknowledgments) >= self.config.flush_threshold:
@@ -90,8 +119,12 @@ class Crawler:
                 except Exception as exc:
                     logger.error("Failed to commit batch: %s", exc)
         except Exception as exc:
+            span.record_exception(exc)
+            span.set_status(StatusCode.ERROR, str(exc))
+
             # nack so NATS can redeliver to another worker
             self._active_message_lease_map.pop(seq, None)
+            self._pending_ack_meta.pop(seq, None)
             try:
                 await msg.nack()
             except Exception:
@@ -110,6 +143,8 @@ class Crawler:
                     "Task interrupted by shutdown, will be redelivered: %s", task.url
                 )
         finally:
+            if self.metrics is not None:
+                self.metrics.task_finished()
             self._processing_count -= 1
             if self._processing_count == 0 and self._pending_acknowledgments:
                 logger.info(
@@ -167,6 +202,14 @@ class Crawler:
                 await msg.ack()
                 seq = msg.raw_message.metadata.sequence.stream
                 self._active_message_lease_map.pop(seq, None)
+                ack_meta = self._pending_ack_meta.pop(seq, None)
+                if ack_meta is None:
+                    logger.warning(
+                        "Missing metrics metadata for acknowledged message %d", seq
+                    )
+                elif self.metrics is not None:
+                    experiment_id, crawl_success = ack_meta
+                    self.metrics.task_acked(experiment_id, crawl_success)
             except Exception as exc:
                 logger.warning("Failed to acknowledge individual message: %s", exc)
                 remaining_failed_acks.append(msg)
@@ -174,14 +217,24 @@ class Crawler:
         # store any messages that failed to ack for the next attempt
         self._pending_acknowledgments = remaining_failed_acks
 
-    async def _acknowledge_single_message_immediately(self, msg: NatsMessage) -> None:
+    async def _acknowledge_single_message_immediately(
+        self,
+        msg: NatsMessage,
+        experiment_id: str,
+        crawl_success: bool,
+    ) -> None:
         """acknowledge a single failed task to remove it from the queue quickly."""
         # we use this if the website doesn't load.
         # we can ack directly so that no other worker wastes their time on it.
+        ack_ok = False
         try:
             await msg.ack()
+            ack_ok = True
         except Exception:
             pass
         finally:
             seq = msg.raw_message.metadata.sequence.stream
             self._active_message_lease_map.pop(seq, None)
+            self._pending_ack_meta.pop(seq, None)
+        if ack_ok and self.metrics is not None:
+            self.metrics.task_acked(experiment_id, crawl_success)

@@ -19,6 +19,8 @@ To read more about each part of the crawler, check their `README`-files:
 
 ## Local Setup
 
+Copy `.env.example` to `.env` and adjust the variables you need. The default values should work for local development.
+
 Start NATS:
 ```bash
 docker compose -f docker-compose.hub.yml up -d
@@ -33,10 +35,6 @@ Install script dependencies:
 ```bash
 uv sync
 ```
-
-You can specify endpoints / behaviours of the crawler by specifying environment variables in `.env`.
-For that, just copy `.env.example` to `.env` and adjust the variables you need. I added comments to explain what each one of the variables does.
-The default values should work for local development.
 
 ## Running an Experiment
 

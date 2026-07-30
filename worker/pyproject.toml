@@ -22,11 +22,14 @@ classifiers = [
 ]
 dependencies = [
   "faststream[nats]",
-  "playwright==1.50.0",
+  "playwright==1.60.0",
   "pyarrow",
   "pydantic",
   "dist-common",
-  "aiohttp"
+  "aiohttp",
+  "opentelemetry-api",
+  "opentelemetry-sdk",
+  "opentelemetry-exporter-otlp-proto-http"
 ]
 
 [tool.uv.sources]

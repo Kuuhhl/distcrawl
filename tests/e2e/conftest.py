@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import pytest
 
@@ -31,6 +31,24 @@ def pydantic_isolation():
 
 
 DOCKER_COMPOSE_FILE = "tests/e2e/docker-compose.yml"
+
+E2E_RESULTS_DIR = root_dir / "tests" / "e2e" / "data_e2e" / "results"
+
+
+def assert_telemetry_files_present(experiment_id: str) -> None:
+    """Check that request/response/site_metadata telemetry was flushed for an experiment."""
+    prefix = f"experiment={experiment_id}/data_type="
+    data_types = {"requests", "responses", "site_metadata"}
+    found = {dt: False for dt in data_types}
+
+    for path in E2E_RESULTS_DIR.rglob("*"):
+        if path.is_file():
+            for data_type in data_types:
+                if f"{prefix}{data_type}/" in str(path):
+                    found[data_type] = True
+
+    missing = [dt for dt, present in found.items() if not present]
+    assert not missing, f"Missing telemetry files for {experiment_id}: {missing}"
 
 
 class DockerCompose:

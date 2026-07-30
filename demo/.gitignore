@@ -1,0 +1,22 @@
+# Terraform working directories and state
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Local variable and override files
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Saved plans and local CLI configuration
+tfplan
+*.tfplan
+.terraformrc
+terraform.rc
+
+# Local environment files not covered by the root ignore
+.env.*
+.envrc

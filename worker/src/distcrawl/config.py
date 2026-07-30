@@ -1,12 +1,45 @@
 """worker configuration."""
 
 from typing import Literal
+from urllib.parse import urlparse, urlunparse
+
 from dist_common.config import BaseCrawlSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class WorkerSettings(BaseCrawlSettings):
     """worker settings from env."""
+
+    enable_otel: bool = Field(default=False, validation_alias="ENABLE_OTEL")
+    otel_collector_endpoint: str = Field(
+        default="http://localhost:4318", validation_alias="OTEL_ENDPOINT"
+    )
+    otel_auth_header: str = Field(default="", validation_alias="OTEL_AUTH_HEADER")
+
+    @field_validator("otel_auth_header", mode="before")
+    @classmethod
+    def _strip_otel_auth_header(cls, value):
+        if isinstance(value, str):
+            return value.strip().strip("\"'")
+        return value
+
+    def _otlp_endpoint(self, signal_path: str) -> str:
+        """append a signal-specific path to the configured otlp base url."""
+        parsed = urlparse(self.otel_collector_endpoint)
+        path = parsed.path.rstrip("/") + "/" + signal_path
+        return urlunparse(parsed._replace(path=path))
+
+    @property
+    def otel_logs_endpoint(self) -> str:
+        return self._otlp_endpoint("v1/logs")
+
+    @property
+    def otel_traces_endpoint(self) -> str:
+        return self._otlp_endpoint("v1/traces")
+
+    @property
+    def otel_metrics_endpoint(self) -> str:
+        return self._otlp_endpoint("v1/metrics")
 
     num_crawlers: int = Field(default=2, validation_alias="NUM_CRAWLERS")
     persistence_batch_size: int = Field(

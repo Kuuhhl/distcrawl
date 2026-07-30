@@ -335,6 +335,7 @@ class TestRequestHandler:
         mock_request.resource_type = "script"
         mock_request.method = "GET"
         mock_request.headers = {"accept": "*/*"}
+        engine._request_ids[mock_request] = "request-id"
 
         await engine._dispatch_request_event(
             mock_request,
@@ -368,6 +369,7 @@ class TestRequestHandler:
         mock_request.resource_type = "document"
         mock_request.method = "GET"
         mock_request.headers = {}
+        engine._request_ids[mock_request] = "request-id"
 
         await engine._dispatch_request_event(
             mock_request, "http://example.com", "e", "s", "u", 0
@@ -389,7 +391,7 @@ class TestRequestHandler:
         )
 
     @pytest.mark.asyncio
-    async def test_swallows_handler_exception(self, mock_config):
+    async def test_propagates_handler_exception(self, mock_config):
         engine = PlaywrightEngine(config=mock_config)
         engine._on_request_callback = AsyncMock(side_effect=RuntimeError("oops"))
 
@@ -400,11 +402,12 @@ class TestRequestHandler:
         mock_request.resource_type = "document"
         mock_request.method = "GET"
         mock_request.headers = {}
+        engine._request_ids[mock_request] = "request-id"
 
-        # should not raise
-        await engine._dispatch_request_event(
-            mock_request, "http://example.com", "e", "s", "u", 0
-        )
+        with pytest.raises(RuntimeError, match="oops"):
+            await engine._dispatch_request_event(
+                mock_request, "http://example.com", "e", "s", "u", 0
+            )
 
 
 class TestResponseHandler:
@@ -424,6 +427,7 @@ class TestResponseHandler:
                 "session_id=abc123xyz789_deadbeef456; Domain=.example.com; Path=/; Expires=Sun, 30 Mar 2025 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax"
             ]
         )
+        engine._request_ids[mock_response.request] = "request-id"
 
         await engine._dispatch_response_event(
             mock_response, "exp1", "sess1", "http://example.com", 1
@@ -446,7 +450,7 @@ class TestResponseHandler:
         await engine._dispatch_response_event(MagicMock(), "e", "s", "u", 0)
 
     @pytest.mark.asyncio
-    async def test_swallows_handler_exception(self, mock_config):
+    async def test_propagates_handler_exception(self, mock_config):
         engine = PlaywrightEngine(config=mock_config)
         engine._on_response_callback = AsyncMock(side_effect=RuntimeError("oops"))
 
@@ -456,8 +460,10 @@ class TestResponseHandler:
         mock_response.headers = {}
         mock_response.request.timing = {}
         mock_response.header_values = AsyncMock(return_value=[])
+        engine._request_ids[mock_response.request] = "request-id"
 
-        await engine._dispatch_response_event(mock_response, "e", "s", "u", 0)
+        with pytest.raises(RuntimeError, match="oops"):
+            await engine._dispatch_response_event(mock_response, "e", "s", "u", 0)
 
 
 class TestCookieAcceptHandler:

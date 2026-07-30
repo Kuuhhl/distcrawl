@@ -2,7 +2,7 @@ name: Docker Publish
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
@@ -24,6 +24,23 @@ jobs:
         include:
           - image: worker
             dockerfile: worker/Dockerfile
+            browser: ""
+          - image: worker-chromium
+            dockerfile: worker/Dockerfile
+            browser: "chromium"
+            tag_suffix: "-chromium"
+          - image: worker-chromium-headless
+            dockerfile: worker/Dockerfile
+            browser: "chromium --only-shell"
+            tag_suffix: "-chromium-headless"
+          - image: worker-firefox
+            dockerfile: worker/Dockerfile
+            browser: "firefox"
+            tag_suffix: "-firefox"
+          - image: worker-webkit
+            dockerfile: worker/Dockerfile
+            browser: "webkit"
+            tag_suffix: "-webkit"
 
     steps:
       - name: Checkout repository
@@ -57,6 +74,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: "BROWSER=${{ matrix.browser }}"
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

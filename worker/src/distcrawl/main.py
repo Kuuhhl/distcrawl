@@ -3,31 +3,49 @@
 import asyncio
 import logging
 import sys
-import uuid
 import time
-from faststream import ExceptionMiddleware, FastStream, AckPolicy, Context, ContextRepo
+import uuid
+from typing import Any, Optional
+
+import aiohttp
+from dist_common import CrawlTask, NodeInfo
+from faststream import (
+    AckPolicy,
+    BaseMiddleware,
+    Context,
+    ContextRepo,
+    ExceptionMiddleware,
+    FastStream,
+)
 from faststream.nats import (
+    ConsumerConfig,
     NatsBroker,
     NatsMessage,
-    ConsumerConfig,
     PullSub,
     RetentionPolicy,
     StorageType,
 )
-import aiohttp
-
 from faststream.nats.schemas.js_stream import JStream
-from dist_common import CrawlTask, NodeInfo
+from opentelemetry import metrics, trace
+
 from distcrawl import (
+    BrowserEngine,
     Crawler,
     CrawlNavigator,
-    PlaywrightEngine,
-    BrowserEngine,
     ParquetBatcher,
+    PlaywrightEngine,
     TelemetrySink,
     WorkerSettings,
 )
 from distcrawl.crawl.errors import BrowserCrashError
+from distcrawl.otel import (
+    DistCrawlMetrics,
+    LoggerProvider,
+    MeterProvider,
+    TracerProvider,
+    setup_otel,
+    shutdown_otel,
+)
 
 settings = WorkerSettings()
 logging.basicConfig(
@@ -36,8 +54,44 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("distcrawl")
-
 exception_middleware = ExceptionMiddleware()
+
+
+class TracingMiddleware(BaseMiddleware):
+    _task_counter: Any = None
+    _task_duration: Any = None
+
+    @classmethod
+    def _init_instruments(cls):
+        if cls._task_counter is None:
+            meter = metrics.get_meter("distcrawl-worker")
+            cls._task_counter = meter.create_counter(
+                "distcrawl.crawl.handler.executions",
+                unit="1",
+                description="Number of crawl-task handler executions.",
+            )
+            cls._task_duration = meter.create_histogram(
+                "distcrawl.crawl.handler.duration",
+                unit="s",
+                description="Duration of crawl-task handler executions.",
+            )
+
+    async def consume_scope(self, call_next, msg):
+        self._init_instruments()
+        assert self._task_counter is not None
+        assert self._task_duration is not None
+        tracer = trace.get_tracer(__name__)
+        start = time.monotonic()
+        with tracer.start_as_current_span("crawl_task"):
+            try:
+                result = await call_next(msg)
+                self._task_counter.add(1, {"handler.success": True})
+                return result
+            except Exception:
+                self._task_counter.add(1, {"handler.success": False})
+                raise
+            finally:
+                self._task_duration.record(time.monotonic() - start)
 
 
 @exception_middleware.add_handler(BrowserCrashError)
@@ -50,7 +104,7 @@ broker = NatsBroker(
     settings.nats_url,
     token=settings.nats_token,
     logger=logger,
-    middlewares=[exception_middleware],
+    middlewares=[exception_middleware, TracingMiddleware],
 )
 app = FastStream(broker, logger=logger)
 
@@ -58,6 +112,7 @@ app = FastStream(broker, logger=logger)
 @app.on_startup
 async def initialize_worker_components(context: ContextRepo):
     """bootstrap all necessary worker components."""
+    worker_id = uuid.uuid4().hex[:8]
     logger.info("Checking worker information...")
     try:
         # this api gives us some general information about the worker node
@@ -88,7 +143,13 @@ async def initialize_worker_components(context: ContextRepo):
         )
         sys.exit(1)
 
-    worker_id = uuid.uuid4().hex[:8]
+    logger_provider, tracer_provider, meter_provider, dist_metrics = setup_otel(
+        worker_id, node_info, settings
+    )
+
+    if dist_metrics is not None:
+        dist_metrics.worker_active(1)
+
     logger.info(
         "Worker information found:\nCountry Code: %s\nIs Residential: %s\nBrowser type: %s\nIs Headless: %s\nAssigned Worker ID: %s",
         node_info.country_code,
@@ -140,7 +201,10 @@ async def initialize_worker_components(context: ContextRepo):
     # setup crawler
     crawl_navigator = CrawlNavigator(engine=browser_engine)
     task_crawler = Crawler(
-        navigator=crawl_navigator, sink=telemetry_sink, config=settings
+        navigator=crawl_navigator,
+        sink=telemetry_sink,
+        config=settings,
+        metrics=dist_metrics,
     )
 
     # make available to context
@@ -148,13 +212,22 @@ async def initialize_worker_components(context: ContextRepo):
     context.set_global("browser_engine", browser_engine)
     context.set_global("telemetry_sink", telemetry_sink)
     context.set_global("task_crawler", task_crawler)
+    context.set_global("logger_provider", logger_provider)
+    context.set_global("tracer_provider", tracer_provider)
+    context.set_global("meter_provider", meter_provider)
+    context.set_global("dist_metrics", dist_metrics)
 
     logger.info("Worker components successfully initialized. Asking for tasks...")
 
 
 @app.on_shutdown
 async def shutdown_worker_components(
-    task_crawler: Crawler = Context(), browser_engine: BrowserEngine = Context()
+    task_crawler: Crawler = Context(),
+    browser_engine: BrowserEngine = Context(),
+    logger_provider: Optional[LoggerProvider] = Context(),
+    tracer_provider: Optional[TracerProvider] = Context(),
+    meter_provider: Optional[MeterProvider] = Context(),
+    dist_metrics: Optional[DistCrawlMetrics] = Context(),
 ):
     """perform cleanup of all components."""
     logger.info("Shutting down worker components...")
@@ -162,6 +235,11 @@ async def shutdown_worker_components(
 
     await task_crawler.persist_telemetry_and_commit_batch()
     await browser_engine.stop_browser_engine()
+
+    if dist_metrics is not None:
+        dist_metrics.worker_active(-1)
+
+    shutdown_otel(logger_provider, tracer_provider, meter_provider)
 
     logger.info("Graceful worker shutdown complete.")
 

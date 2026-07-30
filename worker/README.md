@@ -52,6 +52,10 @@ To use it:
 3. Generate a strong `NATS_TOKEN` and set it as `NATS_TOKEN` in `.env`. Since you are exposing NATS to the public internet, anyone who knows this will have access.
 2. Then run `docker-compose -f docker-compose.hub.yml up --profile cloudflare_tunnel`.
 
+# Monitoring the Crawl
+
+Monitoring the crawl can be done in two ways: one is the simple `uv run dist-status`-script (only very basic progress indicator). The other one is using the OpenTelemetry data exported by the worker. Connecting to an OTel collector such as Grafana Cloud in `.env` allows you to observe logs, metrics, and traces in a live dashboard.
+
 # Debugging (on macos)
 
 To watch the browser inside docker on macos, we have to forward the x-buffer:

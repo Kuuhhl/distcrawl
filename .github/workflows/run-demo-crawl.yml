@@ -1,0 +1,133 @@
+name: "Run Demo-Crawl"
+
+on:
+  workflow_run:
+    workflows: ["Docker Publish"]
+    types: [completed]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  terraform:
+    name: "Terraform"
+    runs-on: ubuntu-latest
+    environment: production
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch Static Secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.16
+        with:
+          method: oidc
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          env-slug: prod
+          secret-path: /static
+          export-type: env
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ env.TF_API_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Terraform Init
+        working-directory: ./demo/terraform
+        run: terraform init
+
+      - name: Terraform Format
+        working-directory: ./demo/terraform
+        run: terraform fmt -check
+
+      - name: Terraform Plan
+        working-directory: ./demo/terraform
+        run: terraform plan -input=false
+        env:
+          TF_VAR_infisical_project_id: ${{ vars.INFISICAL_PROJECT_ID }}
+
+      - name: Terraform Apply
+        working-directory: ./demo/terraform
+        run: terraform apply -auto-approve -input=false
+        env:
+          TF_VAR_infisical_project_id: ${{ vars.INFISICAL_PROJECT_ID }}
+
+      - name: Set non-sensitive environment variables
+        working-directory: ./demo/terraform
+        run: |
+          echo "NATS_URL=wss://nats-distcrawl-demo.landmann.ph" >> $GITHUB_ENV
+          echo "RESULTS_BUCKET_NAME=$(terraform output -raw results_bucket_name)" >> $GITHUB_ENV
+
+      - name: Fetch Dynamic Secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.16
+        with:
+          method: oidc
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          env-slug: prod
+          secret-path: /dynamic
+          export-type: env
+
+      - name: Install Python Deps
+        run: pip install -r demo/requirements.txt
+
+      - name: Seed Tasks to NATS
+        run: python demo/scripts/seed_sites.py
+        timeout-minutes: 5
+
+      - name: "Long-Polling NATS to wait until the crawl is done (timeout: 30mins)"
+        run: python demo/scripts/check_done.py
+        timeout-minutes: 30
+
+      - name: Build Result Website
+        run: python demo/scripts/build_result_website.py
+        timeout-minutes: 5
+
+      - name: Upload GitHub Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./public"
+
+      - name: Terraform Destroy
+        if: always()
+        working-directory: ./demo/terraform
+        run: |
+          terraform destroy -auto-approve -input=false || \
+          (echo "Retrying destroy in 120s..." && sleep 120 && terraform destroy -auto-approve -input=false)
+        env:
+          TF_VAR_infisical_project_id: ${{ vars.INFISICAL_PROJECT_ID }}
+
+  deploy:
+    name: "Deploy to GitHub Pages"
+    runs-on: ubuntu-latest
+    needs: terraform
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

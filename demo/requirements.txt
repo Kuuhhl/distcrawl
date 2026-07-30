@@ -1,0 +1,5 @@
+nats-py[aiohttp]==2.14.0
+aiohttp==3.13.5
+obstore==0.9.3
+duckdb==1.5.2
+Jinja2==3.1.6

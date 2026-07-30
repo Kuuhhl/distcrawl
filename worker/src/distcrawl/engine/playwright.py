@@ -1,9 +1,11 @@
 """playwright browser engine for web crawling."""
 
 import asyncio
-import time
 import json
 import logging
+import time
+import uuid
+import weakref
 from functools import wraps
 from typing import Callable, List, Optional
 
@@ -13,9 +15,7 @@ from dist_common.types import (
     ResponseEvent,
     SiteMetadataEvent,
 )
-from distcrawl.config import WorkerSettings
-from distcrawl.engine.consent_acceptor import COOKIE_ACCEPTOR_JS
-from distcrawl.telemetry.protocol import CallbackSink
+from opentelemetry import trace
 from playwright.async_api import (
     Browser,
     Page,
@@ -26,7 +26,10 @@ from playwright.async_api import (
     TimeoutError as PWTimeoutError,
 )
 
-from distcrawl.crawl.errors import BrowserCrashError
+from distcrawl.config import WorkerSettings
+from distcrawl.crawl.errors import BrowserCrashError, TelemetryIncompleteError
+from distcrawl.engine.consent_acceptor import COOKIE_ACCEPTOR_JS
+from distcrawl.telemetry.protocol import CallbackSink
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,18 @@ class PlaywrightEngine:
         self._on_cookie_accept_callback: Callable | None = None
         self._on_site_metadata_callback: Callable | None = None
 
+        self._request_ids: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+    def _start_tracked_telemetry_task(
+        self,
+        coro,
+        tasks: set[asyncio.Task],
+    ) -> asyncio.Task:
+        """Schedule a telemetry coroutine and track it until completion."""
+        task = asyncio.create_task(coro)
+        tasks.add(task)
+        return task
+
     def set_sink(self, sink: CallbackSink) -> None:
         """link telemetry callbacks to the browser engine."""
         self._on_cookie_accept_callback = sink.on_cookie_accept
@@ -86,6 +101,13 @@ class PlaywrightEngine:
     ) -> None:
         """internal handler for cookie consent detections."""
         logger.info("Cookie consent detected on %s", url)
+        trace.get_current_span().add_event(
+            "cookie_accept",
+            {
+                "cookie_accept.url": url,
+                "cookie_accept.depth": crawl_depth,
+            },
+        )
         if self._on_cookie_accept_callback:
             event: CookieAcceptEvent = {
                 "experiment_id": experiment_id,
@@ -156,40 +178,64 @@ class PlaywrightEngine:
         page._crawl_depth = 0
         page._experiment_id = experiment_id
         page._crawl_session_id = crawl_session_id
+        page._accepting_telemetry = True
+        page._telemetry_tasks = set()
 
-        # attach event listeners to requests and responses
-        page.on(
-            "request",
-            lambda r, p=page, eid=experiment_id, sid=crawl_session_id, curl=crawled_url: (
-                asyncio.create_task(
-                    self._dispatch_request_event(
-                        r, p.url, eid, sid, curl, getattr(p, "_crawl_depth", 0)
-                    )
-                )
-            ),
-        )
-        page.on(
-            "response",
-            lambda r, p=page, eid=experiment_id, sid=crawl_session_id, curl=crawled_url: (
-                asyncio.create_task(
-                    self._dispatch_response_event(
-                        r, eid, sid, curl, getattr(p, "_crawl_depth", 0)
-                    )
-                )
-            ),
-        )
+        # attach event listeners to requests and responses and cookies
+        def _on_request(request):
+            if not page._accepting_telemetry:
+                return
+            # we have to generate our own request uuid
+            # bc playwright does not have it by itself.
+            # we use a weakref to map requestid to the responses as they come in :)
+            request_id = str(uuid.uuid4())
+            self._request_ids[request] = request_id
 
-        # expose cookie accept handler to the cookie-script
-        await context.expose_binding(
-            "handleCookieAccept",
-            lambda source, url, ts, p=page, eid=experiment_id, sid=crawl_session_id, curl=crawled_url: (
-                asyncio.create_task(
-                    self._handle_cookie_accept_event(
-                        url, ts, eid, sid, curl, getattr(p, "_crawl_depth", 0)
-                    )
-                )
-            ),
-        )
+            self._start_tracked_telemetry_task(
+                self._dispatch_request_event(
+                    request,
+                    page.url,
+                    experiment_id,
+                    crawl_session_id,
+                    crawled_url,
+                    getattr(page, "_crawl_depth", 0),
+                ),
+                page._telemetry_tasks,
+            )
+
+        def _on_response(response):
+            if not page._accepting_telemetry:
+                return
+            self._start_tracked_telemetry_task(
+                self._dispatch_response_event(
+                    response,
+                    experiment_id,
+                    crawl_session_id,
+                    crawled_url,
+                    getattr(page, "_crawl_depth", 0),
+                ),
+                page._telemetry_tasks,
+            )
+
+        def _on_cookie_accept(source, url, timestamp):
+            if not page._accepting_telemetry:
+                return
+            self._start_tracked_telemetry_task(
+                self._handle_cookie_accept_event(
+                    url,
+                    timestamp,
+                    experiment_id,
+                    crawl_session_id,
+                    crawled_url,
+                    getattr(page, "_crawl_depth", 0),
+                ),
+                page._telemetry_tasks,
+            )
+
+        page.on("request", _on_request)
+        page.on("response", _on_response)
+
+        await context.expose_binding("handleCookieAccept", _on_cookie_accept)
 
         return page
 
@@ -206,19 +252,45 @@ class PlaywrightEngine:
                 return True
         return False
 
+    async def _drain_telemetry_tasks(self, page: Page) -> None:
+        """wait for in-flight telemetry handler tasks to finish."""
+
+        tasks = tuple(page._telemetry_tasks)
+        if not tasks:
+            return []
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        page._telemetry_tasks.clear()
+
+        errors = [result for result in results if isinstance(result, BaseException)]
+
+        if errors:
+            raise TelemetryIncompleteError(
+                f"{len(errors)} telemetry task(s) failed"
+            ) from errors[0]
+
     @_browser_operation
     async def close_crawl_context(self, page: Page) -> None:
         """safely terminate a browser page and its context."""
         context = page.context
+        page._accepting_telemetry = False
         try:
-            async with asyncio.timeout(10.0):
-                await page.close()
-                await context.close()
-            logger.info("Page and context closed successfully")
-        except asyncio.TimeoutError:
-            logger.warning("Timeout during page closure - proceeding anyway")
-        except Exception as exc:
-            logger.debug("Error during page closure: %s", exc)
+            try:
+                async with asyncio.timeout(10.0):
+                    await self._drain_telemetry_tasks(page)
+            except asyncio.TimeoutError as e:
+                raise TelemetryIncompleteError(
+                    "Telemetry tasks did not complete before cutoff timeout."
+                ) from e
+        finally:
+            try:
+                async with asyncio.timeout(5.0):
+                    await page.close()
+                    await context.close()
+                    logger.debug("Page and context closed successfully")
+            except Exception as exc:
+                logger.debug("Error during page closure: %s", exc)
 
     def is_engine_ready(self) -> bool:
         """check if browser engine is operational."""
@@ -272,6 +344,8 @@ class PlaywrightEngine:
                 self._perform_navigation_and_extraction(url, page),
                 timeout=total_timeout_s,
             )
+        except TelemetryIncompleteError:
+            raise
         except (asyncio.TimeoutError, PWTimeoutError):
             if await self.browser_engine_dead():
                 raise BrowserCrashError(f"Browser died during navigation to {url}")
@@ -333,20 +407,30 @@ class PlaywrightEngine:
             description = await page.evaluate(
                 '() => document.querySelector(\'meta[name="description"]\')?.content?.slice(0, 500) || ""'
             )
-
-            if self._on_site_metadata_callback:
-                event: SiteMetadataEvent = {
-                    "crawl_session_id": getattr(page, "_crawl_session_id", ""),
-                    "description": description,
-                    "timestamp": str(time.time()),
-                }
-                exp_id = getattr(page, "_experiment_id", "default")
-                await self._on_site_metadata_callback(event, exp_id)
-        except BrowserCrashError:
-            logger.warning("Browser crashed while extracting metadata for %s", page.url)
-            raise
         except Exception as exc:
-            logger.warning("Metadata extraction failed for %s: %s", page.url, exc)
+            if await self.browser_engine_dead():
+                raise BrowserCrashError(
+                    f"Browser died while extracting metadata for {page.url}"
+                ) from exc
+            raise TelemetryIncompleteError(
+                f"Site metadata could not be extracted for {page.url}"
+            ) from exc
+
+        if not self._on_site_metadata_callback:
+            return
+
+        event: SiteMetadataEvent = {
+            "crawl_session_id": getattr(page, "_crawl_session_id", ""),
+            "description": description,
+            "timestamp": str(time.time()),
+        }
+        exp_id = getattr(page, "_experiment_id", "default")
+        try:
+            await self._on_site_metadata_callback(event, exp_id)
+        except Exception as exc:
+            raise TelemetryIncompleteError(
+                f"Site metadata could not be recorded for {page.url}"
+            ) from exc
 
     async def _dispatch_request_event(
         self,
@@ -369,7 +453,7 @@ class PlaywrightEngine:
 
                 event: RequestEvent = {
                     "experiment_id": experiment_id,
-                    "request_id": request._guid,  # https://github.com/microsoft/playwright/issues/13246 implementation detail, not public.
+                    "request_id": self._request_ids[request],
                     "worker_id": "",  # will be populated by the sink
                     "crawl_session_id": crawl_session_id,
                     "timestamp": str(time.time()),
@@ -384,9 +468,10 @@ class PlaywrightEngine:
                 }
                 await self._on_request_callback(event)
             except Exception as exc:
-                logger.debug(
+                logger.warning(
                     "Telemetry dispatch error (request) for %s: %s", request.url, exc
                 )
+                raise
 
     async def _dispatch_response_event(
         self,
@@ -402,7 +487,7 @@ class PlaywrightEngine:
                 timing = response.request.timing
                 event: ResponseEvent = {
                     "experiment_id": experiment_id,
-                    "request_id": response.request._guid,
+                    "request_id": self._request_ids[response.request],
                     "crawl_session_id": crawl_session_id,
                     "timestamp": str(
                         timing.get("startTime", 0) + timing.get("responseStart", 0)
@@ -419,3 +504,4 @@ class PlaywrightEngine:
                 logger.debug(
                     "Telemetry dispatch error (response) for %s: %s", response.url, exc
                 )
+                raise

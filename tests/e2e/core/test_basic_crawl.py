@@ -1,10 +1,10 @@
 import logging
-import os
 
 import pytest
 from dist_common.models import ExperimentParams
 from seed import seed_experiment_async
 from config import ScriptSettings
+from tests.e2e.conftest import assert_telemetry_files_present
 from tests.nats_utils import wait_for_nats, wait_for_completion
 
 logger = logging.getLogger("distcrawl.test.basic")
@@ -54,6 +54,8 @@ async def test_basic_crawl_flow(dc):
         print(dc.logs("crawler_worker"))
         print(dc.logs("seeder"))
         pytest.fail("Crawl timeout")
+
+    assert_telemetry_files_present(exp_id)
 
     assert dc.is_running("crawler_worker")
 
